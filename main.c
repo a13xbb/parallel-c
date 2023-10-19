@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <omp.h>
 
 #define DT 0.05
 
@@ -79,20 +80,38 @@ void resolveCollisions()
 
 void computeAccelerations()
 {
+    int my_rank = omp_get_thread_num();
+    // printf("Computing in thread %d\n", my_rank);
+
+    int thread_count = omp_get_num_threads();
+    // printf("Summary threads: %d\n", thread_count);
+
+    int chunk_sz = bodies / thread_count;
+
+    int start = my_rank * chunk_sz;
+    int end = start + chunk_sz;
+    if (end > bodies) {
+        end = bodies;
+    }
+
     int i, j;
 
-    for (i = 0; i < bodies; i++)
-    {
+    for (i = start; i < end; i++) {
         accelerations[i].x = 0;
         accelerations[i].y = 0;
-        for (j = 0; j < bodies; j++)
+    }
+
+    for (i = start; i < end; i++)
+    {
+        for (j = i + 1; j < end; j++)
         {
-            if (i != j)
-            {
-                accelerations[i] = addVectors(accelerations[i], scaleVector(GravConstant * masses[j] / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i])));
-            }
+            // printf("calculating points %d and %d\n", i, j);
+            vector acc_delta = scaleVector(GravConstant * 1 / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
+            accelerations[i] = addVectors(accelerations[i], scaleVector(masses[j], acc_delta));
+            accelerations[j] = addVectors(accelerations[j], scaleVector(-masses[i], acc_delta));
         }
     }
+    
 }
 
 void computeVelocities()
@@ -113,6 +132,7 @@ void computePositions()
 
 void simulate()
 {
+#pragma omp parallel num_threads(3)
     computeAccelerations();
     computePositions();
     computeVelocities();
@@ -139,3 +159,4 @@ int main(int argC, char *argV[])
     }
     return 0;
 }
+
