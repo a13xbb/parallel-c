@@ -11,6 +11,7 @@ typedef struct
 } vector;
 
 int bodies, timeSteps;
+int NUM_THREADS = 6;
 double *masses, GravConstant;
 vector *positions, *velocities, *accelerations;
 
@@ -78,40 +79,40 @@ void resolveCollisions()
         }
 }
 
-void computeAccelerations()
-{
-    int my_rank = omp_get_thread_num();
-    // printf("Computing in thread %d\n", my_rank);
-
-    int thread_count = omp_get_num_threads();
-    // printf("Summary threads: %d\n", thread_count);
-
-    int chunk_sz = bodies / thread_count;
-
-    int start = my_rank * chunk_sz;
-    int end = start + chunk_sz;
-    if (end > bodies) {
-        end = bodies;
-    }
-
-    int i, j;
-
-    for (i = start; i < end; i++) {
-        accelerations[i].x = 0;
-        accelerations[i].y = 0;
-    }
-
-    for (i = start; i < end; i++)
-    {
-        for (j = i + 1; j < end; j++)
-        {
-            // printf("calculating points %d and %d\n", i, j);
-            vector acc_delta = scaleVector(GravConstant * 1 / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
-            accelerations[i] = addVectors(accelerations[i], scaleVector(masses[j], acc_delta));
-            accelerations[j] = addVectors(accelerations[j], scaleVector(-masses[i], acc_delta));
+void computeAccelerations() {
+    vector **fs;
+    fs = malloc(NUM_THREADS * sizeof(vector*));
+    for (int i = 0; i < NUM_THREADS; i++) {
+        fs[i] = malloc(bodies * sizeof(vector));
+        for (int j = 0; j < bodies; j++) {
+            fs[i][j].x = 0;
+            fs[i][j].y = 0;
         }
     }
-    
+
+    #pragma omp parallel num_threads(NUM_THREADS) 
+    {
+        #pragma omp for
+        for (int i = 0; i < bodies; i++) {
+            int my_rank = omp_get_thread_num();
+            printf("Thread num: %d\n", my_rank);
+            for (int j = 0; j < i; j++) {
+                vector acc_delta = scaleVector(GravConstant / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
+                fs[my_rank][i] = addVectors(fs[my_rank][i], scaleVector(masses[j], acc_delta));
+                fs[my_rank][j] = addVectors(fs[my_rank][j], scaleVector(-masses[i], acc_delta)); 
+            }
+        }
+    }
+        
+    for (int i = 0; i < bodies; i++) {
+        accelerations[i].x = 0;
+        accelerations[i].y = 0;
+        for (int j = 0; j < NUM_THREADS; j++) {
+            accelerations[i] = addVectors(accelerations[i], fs[j][i]);
+        }
+    }
+
+
 }
 
 void computeVelocities()
@@ -132,11 +133,11 @@ void computePositions()
 
 void simulate()
 {
-#pragma omp parallel num_threads(3)
     computeAccelerations();
-    computePositions();
+    
     computeVelocities();
-    resolveCollisions();
+    computePositions();
+    // resolveCollisions();
 }
 
 int main(int argC, char *argV[])
@@ -148,15 +149,19 @@ int main(int argC, char *argV[])
     else
     {
         initiateSystem(argV[1]);
-        printf("Body   :     x              y           vx              vy   ");
+        //printf("Body   :     x              y           vx              vy   ");
+        double start_time = omp_get_wtime();
         for (i = 0; i < timeSteps; i++)
         {
-            printf("\nCycle %d\n", i + 1);
+            //printf("\nCycle %d\n", i + 1);
             simulate();
             for (j = 0; j < bodies; j++)
                 printf("Body %d : %lf\t%lf\t%lf\t%lf\n", j + 1, positions[j].x, positions[j].y, velocities[j].x, velocities[j].y);
         }
+        double end_time = omp_get_wtime();
+        printf("%.6lf", end_time - start_time);
     }
+
     return 0;
 }
 
