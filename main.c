@@ -11,7 +11,7 @@ typedef struct
 } vector;
 
 int bodies, timeSteps;
-int NUM_THREADS = 6;
+int NUM_THREADS = 3;
 double *masses, GravConstant;
 vector *positions, *velocities, *accelerations;
 
@@ -92,12 +92,21 @@ void computeAccelerations() {
 
     #pragma omp parallel num_threads(NUM_THREADS) 
     {
-        #pragma omp for
+        #pragma omp for schedule(dynamic, 1)
         for (int i = 0; i < bodies; i++) {
             int my_rank = omp_get_thread_num();
-            printf("Thread num: %d\n", my_rank);
+            // printf("Thread num: %d\n", my_rank);
             for (int j = 0; j < i; j++) {
-                vector acc_delta = scaleVector(GravConstant / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
+                vector dist = subtractVectors(positions[i], positions[j]);
+                if (dist.x < 1) { //добавляем точкам радиус 0.5
+                    dist.x = 1;
+                }
+                if (dist.y < 1) {
+                    dist.y = 1;
+                }
+                vector dist_neg = scaleVector(-1, dist);
+
+                vector acc_delta = scaleVector(GravConstant / pow(mod(dist), 3), dist_neg);
                 fs[my_rank][i] = addVectors(fs[my_rank][i], scaleVector(masses[j], acc_delta));
                 fs[my_rank][j] = addVectors(fs[my_rank][j], scaleVector(-masses[i], acc_delta)); 
             }
@@ -134,10 +143,9 @@ void computePositions()
 void simulate()
 {
     computeAccelerations();
-    
-    computeVelocities();
     computePositions();
-    // resolveCollisions();
+    computeVelocities();
+    resolveCollisions();
 }
 
 int main(int argC, char *argV[])
@@ -149,11 +157,11 @@ int main(int argC, char *argV[])
     else
     {
         initiateSystem(argV[1]);
-        //printf("Body   :     x              y           vx              vy   ");
+        printf("Body   :     x              y           vx              vy   ");
         double start_time = omp_get_wtime();
         for (i = 0; i < timeSteps; i++)
         {
-            //printf("\nCycle %d\n", i + 1);
+            printf("\nCycle %d\n", i + 1);
             simulate();
             for (j = 0; j < bodies; j++)
                 printf("Body %d : %lf\t%lf\t%lf\t%lf\n", j + 1, positions[j].x, positions[j].y, velocities[j].x, velocities[j].y);
