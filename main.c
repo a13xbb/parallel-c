@@ -11,7 +11,7 @@ typedef struct
 } vector;
 
 int bodies, timeSteps;
-int NUM_THREADS = 3;
+int NUM_THREADS = 4;
 double *masses, GravConstant;
 vector *positions, *velocities, *accelerations;
 
@@ -97,16 +97,16 @@ void computeAccelerations() {
             int my_rank = omp_get_thread_num();
             // printf("Thread num: %d\n", my_rank);
             for (int j = 0; j < i; j++) {
-                vector dist = subtractVectors(positions[i], positions[j]);
-                if (dist.x < 1) { //добавляем точкам радиус 0.5
-                    dist.x = 1;
-                }
-                if (dist.y < 1) {
-                    dist.y = 1;
-                }
-                vector dist_neg = scaleVector(-1, dist);
+            //     vector dist = subtractVectors(positions[i], positions[j]);
+            //     if (dist.x < 1) { //добавляем точкам радиус 0.5
+            //         dist.x = 1;
+            //     }
+            //     if (dist.y < 1) {
+            //         dist.y = 1;
+            //     }
+            //     vector dist_neg = scaleVector(-1, dist);
 
-                vector acc_delta = scaleVector(GravConstant / pow(mod(dist), 3), dist_neg);
+                vector acc_delta = scaleVector(GravConstant / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
                 fs[my_rank][i] = addVectors(fs[my_rank][i], scaleVector(masses[j], acc_delta));
                 fs[my_rank][j] = addVectors(fs[my_rank][j], scaleVector(-masses[i], acc_delta)); 
             }
@@ -143,9 +143,9 @@ void computePositions()
 void simulate()
 {
     computeAccelerations();
-    computePositions();
     computeVelocities();
-    resolveCollisions();
+    computePositions();
+    // resolveCollisions();
 }
 
 int main(int argC, char *argV[])
