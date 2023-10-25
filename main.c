@@ -79,49 +79,49 @@ void resolveCollisions()
         }
 }
 
-void computeAccelerations() {
+void computeAccelerations()
+{
     vector **fs;
-    fs = malloc(NUM_THREADS * sizeof(vector*));
-    for (int i = 0; i < NUM_THREADS; i++) {
+    fs = malloc(NUM_THREADS * sizeof(vector *));
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
         fs[i] = malloc(bodies * sizeof(vector));
-        for (int j = 0; j < bodies; j++) {
+        for (int j = 0; j < bodies; j++)
+        {
             fs[i][j].x = 0;
             fs[i][j].y = 0;
         }
     }
 
-    #pragma omp parallel num_threads(NUM_THREADS) 
+#pragma omp parallel num_threads(NUM_THREADS)
     {
-        #pragma omp for schedule(dynamic, 1)
-        for (int i = 0; i < bodies; i++) {
+#pragma omp for schedule(dynamic, 4)
+        for (int i = 0; i < bodies; i++)
+        {
             int my_rank = omp_get_thread_num();
             // printf("Thread num: %d\n", my_rank);
-            for (int j = 0; j < i; j++) {
-            //     vector dist = subtractVectors(positions[i], positions[j]);
-            //     if (dist.x < 1) { //добавляем точкам радиус 0.5
-            //         dist.x = 1;
-            //     }
-            //     if (dist.y < 1) {
-            //         dist.y = 1;
-            //     }
-            //     vector dist_neg = scaleVector(-1, dist);
-
-                vector acc_delta = scaleVector(GravConstant / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
-                fs[my_rank][i] = addVectors(fs[my_rank][i], scaleVector(masses[j], acc_delta));
-                fs[my_rank][j] = addVectors(fs[my_rank][j], scaleVector(-masses[i], acc_delta)); 
+            for (int j = 0; j < i; j++)
+            {
+                vector dist = subtractVectors(positions[j], positions[i]);
+                double dist_mod = mod(dist);
+                if (dist_mod >= 1) {
+                    vector acc_delta = scaleVector(GravConstant / pow(dist_mod, 3), dist);
+                    fs[my_rank][i] = addVectors(fs[my_rank][i], scaleVector(masses[j], acc_delta));
+                    fs[my_rank][j] = addVectors(fs[my_rank][j], scaleVector(-masses[i], acc_delta));
+                }
             }
         }
     }
-        
-    for (int i = 0; i < bodies; i++) {
+
+    for (int i = 0; i < bodies; i++)
+    {
         accelerations[i].x = 0;
         accelerations[i].y = 0;
-        for (int j = 0; j < NUM_THREADS; j++) {
+        for (int j = 0; j < NUM_THREADS; j++)
+        {
             accelerations[i] = addVectors(accelerations[i], fs[j][i]);
         }
     }
-
-
 }
 
 void computeVelocities()
@@ -137,7 +137,7 @@ void computePositions()
     int i;
 
     for (i = 0; i < bodies; i++)
-        positions[i] = addVectors(positions[i], scaleVector(DT,velocities[i]));
+        positions[i] = addVectors(positions[i], scaleVector(DT, velocities[i]));
 }
 
 void simulate()
@@ -145,7 +145,7 @@ void simulate()
     computeAccelerations();
     computeVelocities();
     computePositions();
-    // resolveCollisions();
+    resolveCollisions();
 }
 
 int main(int argC, char *argV[])
@@ -172,4 +172,3 @@ int main(int argC, char *argV[])
 
     return 0;
 }
-
