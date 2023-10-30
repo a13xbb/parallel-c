@@ -11,7 +11,6 @@ typedef struct
 } vector;
 
 int bodies, timeSteps;
-int NUM_THREADS = 4;
 double *masses, GravConstant;
 vector *positions, *velocities, *accelerations;
 
@@ -79,7 +78,7 @@ void resolveCollisions()
         }
 }
 
-void computeAccelerations()
+void computeAccelerations(int NUM_THREADS)
 {
     vector **fs;
     fs = malloc(NUM_THREADS * sizeof(vector *));
@@ -140,9 +139,9 @@ void computePositions()
         positions[i] = addVectors(positions[i], scaleVector(DT, velocities[i]));
 }
 
-void simulate()
+void simulate(int NUM_THREADS)
 {
-    computeAccelerations();
+    computeAccelerations(NUM_THREADS);
     computeVelocities();
     computePositions();
     resolveCollisions();
@@ -152,22 +151,23 @@ int main(int argC, char *argV[])
 {
     int i, j;
 
-    if (argC != 2)
+    if (argC != 3)
         printf("Usage : %s <file name containing system configuration data>", argV[0]);
     else
     {
         initiateSystem(argV[1]);
-        printf("Body   :     x              y           vx              vy   ");
+        int num_threads = strtol(argV[2], NULL, 10);
+        //printf("Body   :     x              y           vx              vy   ");
         double start_time = omp_get_wtime();
         for (i = 0; i < timeSteps; i++)
         {
-            printf("\nCycle %d\n", i + 1);
-            simulate();
-            for (j = 0; j < bodies; j++)
-                printf("Body %d : %lf\t%lf\t%lf\t%lf\n", j + 1, positions[j].x, positions[j].y, velocities[j].x, velocities[j].y);
+            //printf("\nCycle %d\n", i + 1);
+            simulate(num_threads);
+            //for (j = 0; j < bodies; j++)
+                //printf("Body %d : %lf\t%lf\t%lf\t%lf\n", j + 1, positions[j].x, positions[j].y, velocities[j].x, velocities[j].y);
         }
         double end_time = omp_get_wtime();
-        printf("%.6lf", end_time - start_time);
+        printf("%.6lf\n", end_time - start_time);
     }
 
     return 0;
