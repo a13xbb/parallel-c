@@ -78,40 +78,49 @@ void resolveCollisions()
         }
 }
 
-void computeAccelerations()
+void computeAccelerations(int NUM_THREADS)
 {
-    int my_rank = omp_get_thread_num();
-    // printf("Computing in thread %d\n", my_rank);
-
-    int thread_count = omp_get_num_threads();
-    // printf("Summary threads: %d\n", thread_count);
-
-    int chunk_sz = bodies / thread_count;
-
-    int start = my_rank * chunk_sz;
-    int end = start + chunk_sz;
-    if (end > bodies) {
-        end = bodies;
-    }
-
-    int i, j;
-
-    for (i = start; i < end; i++) {
-        accelerations[i].x = 0;
-        accelerations[i].y = 0;
-    }
-
-    for (i = start; i < end; i++)
+    vector **fs;
+    fs = malloc(NUM_THREADS * sizeof(vector *));
+    for (int i = 0; i < NUM_THREADS; i++)
     {
-        for (j = i + 1; j < end; j++)
+        fs[i] = malloc(bodies * sizeof(vector));
+        for (int j = 0; j < bodies; j++)
         {
-            // printf("calculating points %d and %d\n", i, j);
-            vector acc_delta = scaleVector(GravConstant * 1 / pow(mod(subtractVectors(positions[i], positions[j])), 3), subtractVectors(positions[j], positions[i]));
-            accelerations[i] = addVectors(accelerations[i], scaleVector(masses[j], acc_delta));
-            accelerations[j] = addVectors(accelerations[j], scaleVector(-masses[i], acc_delta));
+            fs[i][j].x = 0;
+            fs[i][j].y = 0;
         }
     }
-    
+
+#pragma omp parallel num_threads(NUM_THREADS)
+    {
+#pragma omp for schedule(dynamic, 4)
+        for (int i = 0; i < bodies; i++)
+        {
+            int my_rank = omp_get_thread_num();
+            // printf("Thread num: %d\n", my_rank);
+            for (int j = 0; j < i; j++)
+            {
+                vector dist = subtractVectors(positions[j], positions[i]);
+                double dist_mod = mod(dist);
+                if (dist_mod >= 1) {
+                    vector acc_delta = scaleVector(GravConstant / pow(dist_mod, 3), dist);
+                    fs[my_rank][i] = addVectors(fs[my_rank][i], scaleVector(masses[j], acc_delta));
+                    fs[my_rank][j] = addVectors(fs[my_rank][j], scaleVector(-masses[i], acc_delta));
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < bodies; i++)
+    {
+        accelerations[i].x = 0;
+        accelerations[i].y = 0;
+        for (int j = 0; j < NUM_THREADS; j++)
+        {
+            accelerations[i] = addVectors(accelerations[i], fs[j][i]);
+        }
+    }
 }
 
 void computeVelocities()
@@ -127,15 +136,14 @@ void computePositions()
     int i;
 
     for (i = 0; i < bodies; i++)
-        positions[i] = addVectors(positions[i], scaleVector(DT,velocities[i]));
+        positions[i] = addVectors(positions[i], scaleVector(DT, velocities[i]));
 }
 
-void simulate()
+void simulate(int NUM_THREADS)
 {
-#pragma omp parallel num_threads(3)
-    computeAccelerations();
-    computePositions();
+    computeAccelerations(NUM_THREADS);
     computeVelocities();
+    computePositions();
     resolveCollisions();
 }
 
@@ -143,20 +151,24 @@ int main(int argC, char *argV[])
 {
     int i, j;
 
-    if (argC != 2)
+    if (argC != 3)
         printf("Usage : %s <file name containing system configuration data>", argV[0]);
     else
     {
         initiateSystem(argV[1]);
-        printf("Body   :     x              y           vx              vy   ");
+        int num_threads = strtol(argV[2], NULL, 10);
+        //printf("Body   :     x              y           vx              vy   ");
+        double start_time = omp_get_wtime();
         for (i = 0; i < timeSteps; i++)
         {
-            printf("\nCycle %d\n", i + 1);
-            simulate();
-            for (j = 0; j < bodies; j++)
-                printf("Body %d : %lf\t%lf\t%lf\t%lf\n", j + 1, positions[j].x, positions[j].y, velocities[j].x, velocities[j].y);
+            //printf("\nCycle %d\n", i + 1);
+            simulate(num_threads);
+            //for (j = 0; j < bodies; j++)
+                //printf("Body %d : %lf\t%lf\t%lf\t%lf\n", j + 1, positions[j].x, positions[j].y, velocities[j].x, velocities[j].y);
         }
+        double end_time = omp_get_wtime();
+        printf("%.6lf\n", end_time - start_time);
     }
+
     return 0;
 }
-
