@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <mpi.h>
 
-int main(int argc, char* argv[]) {
-    int n_rows = 6, n_cols = 4;
+int main(int argc, char* argV[]) {
+    int n_rows, n_cols;
+    n_rows = strtol(argV[1], NULL, 10);
+    n_cols = strtol(argV[2], NULL, 10);
     int my_rank, thread_cnt, local_n_rows;
-    MPI_Init(&argc, &argv);
+    MPI_Init(&argc, &argV);
     MPI_Comm_size(MPI_COMM_WORLD, &thread_cnt);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     int *matrix, *vector, *local_rows, *product, *local_product;
@@ -31,12 +33,6 @@ int main(int argc, char* argv[]) {
         recv_sum += recvcounts[rank];
     }
 
-    // printf("Sendcounts:\n");
-    // for (int i = 0; i < thread_cnt; i++) {
-    //     printf("%d ", sendcounts[i]);
-    // }
-    // printf("\n");
-
     if (remainder == 0 || my_rank >= remainder) {
         local_n_rows = n_rows / thread_cnt;
     } else if (my_rank < remainder) {
@@ -49,6 +45,7 @@ int main(int argc, char* argv[]) {
     product = (int*)malloc(n_rows * sizeof(int));
     local_product = (int*)malloc(local_n_rows * sizeof(int));
 
+    
     if (my_rank == 0) {
         for (int i = 0; i < n_rows; i++) {
             for (int j = 0; j < n_cols; j++) {
@@ -59,24 +56,26 @@ int main(int argc, char* argv[]) {
             vector[i] = rand() % 10;
         }
 
-        printf("Matrix:\n");
-        for (int i = 0; i < n_rows; i++) {
-            for (int j = 0; j < n_cols; j++) {
-                printf("%d ", matrix[i * n_cols + j]);
-            }
-            printf("\n");
-        }
-        printf("\n");
-        printf("Vector:\n");
-        for (int i = 0; i < n_cols; i++) {
-            printf("%d ", vector[i]);
-        }
-        printf("\n\n");
+        //------------------OUTPUT--------------------
+        // printf("Matrix:\n");
+        // for (int i = 0; i < n_rows; i++) {
+        //     for (int j = 0; j < n_cols; j++) {
+        //         printf("%d ", matrix[i * n_cols + j]);
+        //     }
+        //     printf("\n");
+        // }
+        // printf("\n");
+        // printf("Vector:\n");
+        // for (int i = 0; i < n_cols; i++) {
+        //     printf("%d ", vector[i]);
+        // }
+        // printf("\n\n");
     }
 
     MPI_Bcast(vector, n_cols, MPI_INT, 0, MPI_COMM_WORLD);
-    // MPI_Scatter(matrix, local_n_rows * n_cols, MPI_INT, local_rows, local_n_rows * n_cols, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Scatterv(matrix, sendcounts, send_displs, MPI_INT, local_rows, local_n_rows * n_cols, MPI_INT, 0, MPI_COMM_WORLD);
+
+    double local_time_start = MPI_Wtime();
 
     for (int i = 0; i < local_n_rows; i++) {
         local_product[i] = 0;
@@ -85,42 +84,42 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    //DEBUG
-    // printf("Local submatrix on thread %d:\n", my_rank);
-    // for (int i = 0; i < local_n_rows; i++) {
-    //     for (int j = 0; j < n_cols; j++) {
-    //         printf("%d ", local_rows[i * n_cols + j]);
+    MPI_Gatherv(local_product, local_n_rows, MPI_INT, product, recvcounts, recv_displs, MPI_INT, 0, MPI_COMM_WORLD);
+    
+    double local_time_finish = MPI_Wtime();
+    double local_time_elapsed = local_time_finish - local_time_start;
+    double time_elapsed;
+    MPI_Reduce(&local_time_elapsed, &time_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    
+    //------------------OUTPUT-----------------
+    // if (my_rank == 0) {
+    //     printf("Product:\n");
+    //     for (int i = 0; i < n_rows; i++) {
+    //         printf("%d ", product[i]);
     //     }
     //     printf("\n");
     // }
-    // printf("\n");
-
-    //DEBUG
-    // printf("Local product on thread %d:\n", my_rank);
-    // for (int i = 0; i < local_n_rows; i++) {
-    //     printf("%d ", local_product[i]);
-    // }
-    // printf("\n\n");
-
-    // MPI_Gather(local_product, local_n_rows, MPI_INT, product, local_n_rows, MPI_INT, 0, MPI_COMM_WORLD);
-
-    //DEBUG
-    // printf("recvcounts:\n");
-    // for (int i = 0; i < thread_cnt; i++) {
-    //     printf("%d ", recvcounts[i]);
-    // }
-    // printf("\n\n");
-
-    MPI_Gatherv(local_product, local_n_rows, MPI_INT, product, recvcounts, recv_displs, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (my_rank == 0) {
-        printf("Product:\n");
-        for (int i = 0; i < n_rows; i++) {
-            printf("%d ", product[i]);
-        }
-        printf("\n");
-    }
 
     MPI_Finalize();
+
+    free(matrix);
+    free(vector);
+    free(local_rows);
+    free(product);
+    free(local_product);
+    free(sendcounts);
+    free(send_displs);
+    free(recvcounts);
+    free(recv_displs);
+
+    //--------------------------DEBUG-----------------------
+    // printf("thread %d n rows = %d\n", my_rank, local_n_rows);
+    // printf("thread %d runtime = %lf\n", my_rank, local_time_elapsed);
+
+    if (my_rank == 0) {
+        printf("Rows parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
+    }
+
     return 0;
 }
