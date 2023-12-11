@@ -72,16 +72,16 @@ int main(int argc, char* argV[]) {
     MPI_Reduce(&local_time_elapsed, &time_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     //------------------OUTPUT-----------------
-    if (my_rank == 0) {
-        printf("Matrix:\n");
-        print_matrix(matrix, n_rows, n_cols);
+    // if (my_rank == 0) {
+    //     printf("Matrix:\n");
+    //     print_matrix(matrix, n_rows, n_cols);
 
-        printf("Vector:\n");
-        print_vector(vector, n_cols);
+    //     printf("Vector:\n");
+    //     print_vector(vector, n_cols);
         
-        printf("Product:\n");
-        print_vector(product, n_rows);
-    }
+    //     printf("Product:\n");
+    //     print_vector(product, n_rows);
+    // }
 
     if (my_rank == 0) {
         printf("Rows parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
