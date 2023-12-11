@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
+#include "./utils.h"
 
 int main(int argc, char* argV[]) {
     int n_rows, n_cols;
@@ -47,29 +48,8 @@ int main(int argc, char* argV[]) {
 
     
     if (my_rank == 0) {
-        for (int i = 0; i < n_rows; i++) {
-            for (int j = 0; j < n_cols; j++) {
-                matrix[i * n_cols + j] = rand() % 10;
-            }
-        }
-        for (int i = 0; i < n_cols; i++) {
-            vector[i] = rand() % 10;
-        }
-
-        //------------------OUTPUT--------------------
-        // printf("Matrix:\n");
-        // for (int i = 0; i < n_rows; i++) {
-        //     for (int j = 0; j < n_cols; j++) {
-        //         printf("%d ", matrix[i * n_cols + j]);
-        //     }
-        //     printf("\n");
-        // }
-        // printf("\n");
-        // printf("Vector:\n");
-        // for (int i = 0; i < n_cols; i++) {
-        //     printf("%d ", vector[i]);
-        // }
-        // printf("\n\n");
+        initialize_matrix(matrix, n_rows, n_cols);
+        initialize_vector(vector, n_cols);
     }
 
     MPI_Bcast(vector, n_cols, MPI_INT, 0, MPI_COMM_WORLD);
@@ -91,17 +71,21 @@ int main(int argc, char* argV[]) {
     double time_elapsed;
     MPI_Reduce(&local_time_elapsed, &time_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    
     //------------------OUTPUT-----------------
-    // if (my_rank == 0) {
-    //     printf("Product:\n");
-    //     for (int i = 0; i < n_rows; i++) {
-    //         printf("%d ", product[i]);
-    //     }
-    //     printf("\n");
-    // }
+    if (my_rank == 0) {
+        printf("Matrix:\n");
+        print_matrix(matrix, n_rows, n_cols);
 
-    MPI_Finalize();
+        printf("Vector:\n");
+        print_vector(vector, n_cols);
+        
+        printf("Product:\n");
+        print_vector(product, n_rows);
+    }
+
+    if (my_rank == 0) {
+        printf("Rows parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
+    }
 
     free(matrix);
     free(vector);
@@ -113,13 +97,7 @@ int main(int argc, char* argV[]) {
     free(recvcounts);
     free(recv_displs);
 
-    //--------------------------DEBUG-----------------------
-    // printf("thread %d n rows = %d\n", my_rank, local_n_rows);
-    // printf("thread %d runtime = %lf\n", my_rank, local_time_elapsed);
-
-    if (my_rank == 0) {
-        printf("Rows parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
-    }
+    MPI_Finalize();
 
     return 0;
 }

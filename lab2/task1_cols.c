@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
+#include "./utils.h"
 
 int main(int argc, char* argV[]) {
     int n_rows, n_cols;
@@ -17,16 +18,10 @@ int main(int argc, char* argV[]) {
     product = (int*)malloc(n_rows * sizeof(int));
     local_product = (int*)malloc(n_rows * sizeof(int));
     
-    for (int i = 0; i < n_rows; i++) {
-        local_product[i] = 0;
-        product[i] = 0;
-        for (int j = 0; j < n_cols; j++) {
-            matrix[i * n_cols + j] = rand() % 10;
-        }
-    }
-    for (int i = 0; i < n_cols; i++) {
-        vector[i] = rand() % 10;
-    }
+    initialize_matrix(matrix, n_rows, n_cols);
+    initialize_vector(vector, n_cols);
+    initialize_vector_with_zeros(local_product, n_rows);
+    initialize_vector_with_zeros(local_product, n_rows);
 
     int remainder = n_cols % thread_cnt;
     int *colcounts, *displs;
@@ -42,24 +37,6 @@ int main(int argc, char* argV[]) {
         displs[rank] = displs_sum;
         displs_sum += colcounts[rank];
     }
-
-    //------------------OUTPUT--------------------
-    // if (my_rank == 0) {
-    //     printf("Matrix:\n");
-    //     for (int i = 0; i < n_rows; i++) {
-    //         for (int j = 0; j < n_cols; j++) {
-    //             printf("%d ", matrix[i * n_cols + j]);
-    //         }
-    //         printf("\n");
-    //     }
-    //     printf("\n");
-    //     printf("Vector:\n");
-    //     for (int i = 0; i < n_cols; i++) {
-    //         printf("%d ", vector[i]);
-    //     }
-    //     printf("\n\n");
-    // }
-    
 
     double local_time_start = MPI_Wtime();
 
@@ -81,22 +58,28 @@ int main(int argc, char* argV[]) {
 
 
 
-    
-    //------------------OUTPUT-----------------
+    //------------------OUTPUT--------------------
     // if (my_rank == 0) {
+    //     printf("Matrix:\n");
+    //     print_matrix(matrix, n_rows, n_cols);
+
+    //     printf("Vector:\n");
+    //     print_vector(vector, n_cols);
+
     //     printf("Product:\n");
-    //     for (int i = 0; i < n_rows; i++) {
-    //         printf("%d ", product[i]);
-    //     }
-    //     printf("\n");
+    //     print_vector(product, n_rows);
     // }
-
-    MPI_Finalize();
-
 
     if (my_rank == 0) {
         printf("Cols parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
     }
+
+    free(matrix);
+    free(vector);
+    free(product);
+    free(local_product);
+
+    MPI_Finalize();
 
     return 0;
 }
