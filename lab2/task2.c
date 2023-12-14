@@ -94,8 +94,8 @@ void DataDistribution(int *a_matrix, int *b_matrix, int *matrix_a_block, int *b_
     }
 }
 
-void ABlockCommunication(int iter, double *pAblock,
-                         double *pMatrixAblock, int BlockSize)
+void ABlockCommunication(int iter, int *pAblock,
+                         int *pMatrixAblock, int BlockSize)
 {
     // Определение ведущего процесса в строке процессной решетки
     int Pivot = (GridCoords[0] + iter) % GridSize;
@@ -112,25 +112,26 @@ void ABlockCommunication(int iter, double *pAblock,
               RowComm);
 }
 
-void BlockMultiplication(double *pAblock, double *pBblock,
-                         double *pCblock, int BlockSize)
+void BlockMultiplication(int *pAblock, int *pBblock,
+                         int *pCblock, int BlockSize)
 {
     // Вычисление произведения матричных блоков
     for (int i = 0; i < BlockSize; i++)
     {
-        for (int j = 0; j < BlockSize; i++)
+        for (int j = 0; j < BlockSize; j++)
         {
             {
-                double temp = 0;
-                for (int k = 0; k < BlockSize; k++)
+                int temp = 0;
+                for (int k = 0; k < BlockSize; k++) {
                     temp += pAblock[i * BlockSize + k] * pBblock[k * BlockSize + j];
+                }
                 pCblock[i * BlockSize + j] += temp;
             }
         }
     }
 }
 
-void BblockCommunication(double *pBblock, int BlockSize)
+void BblockCommunication(int *pBblock, int BlockSize)
 {
     MPI_Status Status;
     int NextProc = GridCoords[0] + 1;
@@ -141,6 +142,20 @@ void BblockCommunication(double *pBblock, int BlockSize)
         PrevProc = GridSize - 1;
     MPI_Sendrecv_replace(pBblock, BlockSize * BlockSize, MPI_DOUBLE,
                          NextProc, 0, PrevProc, 0, ColComm, &Status);
+}
+
+void ParallelResultCalculation(int *pAblock, int *pMatrixAblock, int *pBblock, int *pCblock, int BlockSize)
+{
+    for (int iter = 0; iter < GridSize; iter++)
+    {
+        // Рассылка блоков матрицы А по строкам процессной решетки
+        ABlockCommunication(iter, pAblock, pMatrixAblock, BlockSize);
+        // Умножение блоков
+        BlockMultiplication(pAblock, pBblock, pCblock, BlockSize);
+        // Циклический сдвиг блоков матрицы В в столбцах процессной
+        // решетки
+        BblockCommunication(pBblock, BlockSize);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -211,15 +226,18 @@ int main(int argc, char *argv[])
             print_matrix(b_matrix, size, size);
         }
 
-        printf("Thread %d A block:\n", my_rank);
-        print_matrix(matrix_a_block, block_size, block_size);
-        MPI_Barrier(MPI_COMM_WORLD);
-        printf("Thread %d B block:\n", my_rank);
-        print_matrix(b_block, block_size, block_size);
+        // printf("Thread %d A block:\n", my_rank);
+        // print_matrix(matrix_a_block, block_size, block_size);
+        // MPI_Barrier(MPI_COMM_WORLD);
+        // printf("Thread %d B block:\n", my_rank);
+        // print_matrix(b_block, block_size, block_size);
 
         // Выполнение параллельного метода Фокса
-        // ParallelResultCalculation(pAblock, pMatrixAblock, pBblock,
-        //                           pCblock, BlockSize);
+        ParallelResultCalculation(a_block, matrix_a_block, b_block,
+                                  c_block, block_size);
+
+        printf("Thread %d c_block:\n", my_rank);
+        print_matrix(c_block, block_size, block_size);
         // Сбор результирующей матрицы на ведущем процессе
         // ResultCollection(pCMatrix, pCblock, Size, BlockSize);
         // Завершение процесса вычислений
