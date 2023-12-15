@@ -95,8 +95,8 @@ void InitialSkew(int *a_block, int *b_block, int *c_block, int block_size)
         // printf("Process %d source_proc: %d, dest_proc: %d\n", my_rank, source_proc, dest_proc);
         int *a_block_copy;
         a_block_copy = copy_matrix(a_block, block_size, block_size);
-        MPI_Send(a_block_copy, block_size * block_size, MPI_INT, dest_proc, 0, MPI_COMM_WORLD);
-        MPI_Recv(a_block, block_size * block_size, MPI_INT, source_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(a_block_copy, block_size * block_size, MPI_INT, dest_proc, 0,
+                     a_block, block_size * block_size, MPI_INT, source_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
     if (my_j != 0)
     {
@@ -110,8 +110,8 @@ void InitialSkew(int *a_block, int *b_block, int *c_block, int block_size)
         // printf("Process %d source_proc: %d, dest_proc: %d\n", my_rank, source_proc, dest_proc);
         int *b_block_copy;
         b_block_copy = copy_matrix(b_block, block_size, block_size);
-        MPI_Send(b_block_copy, block_size * block_size, MPI_INT, dest_proc, 1, MPI_COMM_WORLD);
-        MPI_Recv(b_block, block_size * block_size, MPI_INT, source_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(b_block_copy, block_size * block_size, MPI_INT, dest_proc, 1,
+                     b_block, block_size * block_size, MPI_INT, source_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
     BlockMultiplication(a_block, b_block, c_block, block_size);
@@ -129,16 +129,16 @@ void ShiftAndMultiply(int *a_block, int *b_block, int *c_block, int block_size)
         int source_proc = my_i * grid_size + (my_j + (grid_size - step)) % grid_size;
         int *a_block_copy;
         a_block_copy = copy_matrix(a_block, block_size, block_size);
-        MPI_Send(a_block_copy, block_size * block_size, MPI_INT, dest_proc, 0, MPI_COMM_WORLD);
-        MPI_Recv(a_block, block_size * block_size, MPI_INT, source_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(a_block_copy, block_size * block_size, MPI_INT, dest_proc, 0,
+                     a_block, block_size * block_size, MPI_INT, source_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         dest_proc = ((my_i + step) % grid_size) * grid_size + my_j;
         source_proc = ((my_i + (grid_size - step)) % grid_size) * grid_size + my_j;
         // printf("Process %d source_proc: %d, dest_proc: %d\n", my_rank, source_proc, dest_proc);
         int *b_block_copy;
         b_block_copy = copy_matrix(b_block, block_size, block_size);
-        MPI_Send(b_block_copy, block_size * block_size, MPI_INT, dest_proc, 1, MPI_COMM_WORLD);
-        MPI_Recv(b_block, block_size * block_size, MPI_INT, source_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(b_block_copy, block_size * block_size, MPI_INT, dest_proc, 1,
+                     b_block, block_size * block_size, MPI_INT, source_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         BlockMultiplication(a_block, b_block, c_block, block_size);
     }
