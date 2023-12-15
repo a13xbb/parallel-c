@@ -45,3 +45,12 @@ void print_matrix(int *matrix, int n_rows, int n_cols) {
     }
     printf("\n");
 }
+
+int* copy_matrix(int *matrix, int n_rows, int n_cols) {
+    int *new_matrix;
+    new_matrix = (int*)malloc(n_rows * n_cols * sizeof(int));
+    for (int i =0; i < n_rows * n_cols; i++) {
+        new_matrix[i] = matrix[i];
+    }
+    return new_matrix;
+}

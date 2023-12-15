@@ -6,41 +6,9 @@
 
 int thread_cnt;
 int my_rank;
-int GridSize;
-int GridCoords[2];
-MPI_Comm GridComm; // коммуникатор - столбец решетки
-MPI_Comm ColComm;  // коммуникатор - строка решетки
-MPI_Comm RowComm;
+int grid_size;
 
-// Создание коммуникатора в виде двумерной квадратной решетки
-// и коммуникаторов для каждой строки и каждого столбца решетки
-void CreateGridCommunicators()
-{
-    int DimSize[2]; // Количество процессов в каждом измерении
-    // решетки
-    int Periodic[2]; // =1 для каждого измерения, являющегося
-    // периодическим
-    int Subdims[2]; // =1 для каждого измерения, оставляемого
-    // в подрешетке
-    DimSize[0] = GridSize;
-    DimSize[1] = GridSize;
-    Periodic[0] = 0;
-    Periodic[1] = 0;
-    // Создание коммуникатора в виде квадратной решетки
-    MPI_Cart_create(MPI_COMM_WORLD, 2, DimSize, Periodic, 1, &GridComm);
-    // Определение координат процесса в решетке
-    MPI_Cart_coords(GridComm, my_rank, 2, GridCoords);
-    // Создание коммуникаторов для строк процессной решетки
-    Subdims[0] = 0; // Фиксация измерения
-    Subdims[1] = 1; // Наличие данного измерения в подрешетке
-    MPI_Cart_sub(GridComm, Subdims, &RowComm);
-    // Создание коммуникаторов для столбцов процессной решетки
-    Subdims[0] = 1;
-    Subdims[1] = 0;
-    MPI_Cart_sub(GridComm, Subdims, &ColComm);
-}
-
-void DataDistribution(int *a_matrix, int *b_matrix, int *matrix_a_block, int *b_block, int size,
+void DataDistribution(int *a_matrix, int *b_matrix, int *a_block, int *b_block, int size,
                       int block_size)
 {
     int grid_size = (int)sqrt((int)thread_cnt);
@@ -51,13 +19,11 @@ void DataDistribution(int *a_matrix, int *b_matrix, int *matrix_a_block, int *b_
         int col_start = my_rank % grid_size;
         int col_end = col_start + block_size;
         int tmp_idx = 0;
-        // print_matrix(a_matrix, size, size);
-        // print_matrix(b_matrix, size, size);
         for (int row = row_start; row < row_end; row++)
         {
             for (int col = col_start; col < col_end; col++)
             {
-                matrix_a_block[tmp_idx] = a_matrix[row * size + col];
+                a_block[tmp_idx] = a_matrix[row * size + col];
                 b_block[tmp_idx] = b_matrix[row * size + col];
                 tmp_idx++;
             }
@@ -89,31 +55,12 @@ void DataDistribution(int *a_matrix, int *b_matrix, int *matrix_a_block, int *b_
     }
     else
     {
-        MPI_Recv(matrix_a_block, block_size * block_size, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(a_block, block_size * block_size, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(b_block, block_size * block_size, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 }
 
-void ABlockCommunication(int iter, int *a_block,
-                         int *matrix_a_block, int block_size)
-{
-    // Определение ведущего процесса в строке процессной решетки
-    int Pivot = (GridCoords[0] + iter) % GridSize;
-    // Копирование передаваемого блока в отдельный буфер памяти
-    if (GridCoords[1] == Pivot)
-    {
-        for (int i = 0; i < block_size * block_size; i++)
-        {
-            a_block[i] = matrix_a_block[i];
-        }
-    }
-    // Рассылка блока
-    MPI_Bcast(a_block, block_size * block_size, MPI_INT, Pivot,
-              RowComm);
-}
-
-void BlockMultiplication(int *a_block, int *b_block,
-                         int *c_block, int block_size)
+void BlockMultiplication(int *a_block, int *b_block, int *c_block, int block_size)
 {
     // Вычисление произведения матричных блоков
     for (int i = 0; i < block_size; i++)
@@ -132,30 +79,68 @@ void BlockMultiplication(int *a_block, int *b_block,
     }
 }
 
-void BblockCommunication(int *b_block, int block_size)
+void InitialSkew(int *a_block, int *b_block, int *c_block, int block_size)
 {
-    MPI_Status Status;
-    int NextProc = GridCoords[0] + 1;
-    if (GridCoords[0] == GridSize - 1)
-        NextProc = 0;
-    int PrevProc = GridCoords[0] - 1;
-    if (GridCoords[0] == 0)
-        PrevProc = GridSize - 1;
-    MPI_Sendrecv_replace(b_block, block_size * block_size, MPI_INT,
-                         NextProc, 0, PrevProc, 0, ColComm, &Status);
+    int my_i = (my_rank / grid_size);
+    int my_j = (my_rank % grid_size);
+    if (my_i != 0)
+    { // i=1, j=0   a_step = 2   dest_proc = 1 * 3 + (0 + 2) % 3 = 5
+        // i=1, j=1   a_step = 2   dest_proc = 1 * 3 + (1 + 2) % 3 = 3
+        // i=2, j=0   a_step = 1   dest_proc = 1 * 3 + (0 + 2) % 3 = 5
+        int a_step = grid_size - my_i;
+        int dest_proc = my_i * grid_size + (my_j + a_step) % grid_size;
+        // i=1, j=0   a_step = 2   dest_proc = 1 * 3 + (1) % 3 = 4
+        // i=1, j=1   a_step = 2   dest_proc = 1 * 3 + (1 + 1) % 3 = 5
+        int source_proc = my_i * grid_size + (my_j + (grid_size - a_step)) % grid_size;
+        // printf("Process %d source_proc: %d, dest_proc: %d\n", my_rank, source_proc, dest_proc);
+        int *a_block_copy;
+        a_block_copy = copy_matrix(a_block, block_size, block_size);
+        MPI_Send(a_block_copy, block_size * block_size, MPI_INT, dest_proc, 0, MPI_COMM_WORLD);
+        MPI_Recv(a_block, block_size * block_size, MPI_INT, source_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+    if (my_j != 0)
+    {
+        // i=1, j=1   a_step = 2   dest_proc = (1+2)%3 + 1 = 1
+        // i=2, j=2   a_step = 1   dest_proc = (2+1)%3 * 3 + 2 = 2
+        int b_step = grid_size - my_j;
+        int dest_proc = ((my_i + b_step) % grid_size) * grid_size + my_j;
+        // i=1, j=1   a_step = 2   source_proc = (1+1)%3 * 3 + 1 = 1
+        // i=2, j=2   a_step = 2   source_proc = (2+2)%3 * 3 + 2 = 5
+        int source_proc = ((my_i + (grid_size - b_step)) % grid_size) * grid_size + my_j;
+        // printf("Process %d source_proc: %d, dest_proc: %d\n", my_rank, source_proc, dest_proc);
+        int *b_block_copy;
+        b_block_copy = copy_matrix(b_block, block_size, block_size);
+        MPI_Send(b_block_copy, block_size * block_size, MPI_INT, dest_proc, 1, MPI_COMM_WORLD);
+        MPI_Recv(b_block, block_size * block_size, MPI_INT, source_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+
+    BlockMultiplication(a_block, b_block, c_block, block_size);
 }
 
-void ParallelResultCalculation(int *a_block, int *matrix_a_block, int *b_block, int *c_block, int block_size)
+void ShiftAndMultiply(int *a_block, int *b_block, int *c_block, int block_size)
 {
-    for (int iter = 0; iter < GridSize; iter++)
+    int my_i = (my_rank / grid_size);
+    int my_j = (my_rank % grid_size);
+
+    for (int i = 0; i < grid_size - 1; i++)
     {
-        // Рассылка блоков матрицы А по строкам процессной решетки
-        ABlockCommunication(iter, a_block, matrix_a_block, block_size);
-        // Умножение блоков
+        int step = grid_size - 1;
+        int dest_proc = my_i * grid_size + (my_j + step) % grid_size;
+        int source_proc = my_i * grid_size + (my_j + (grid_size - step)) % grid_size;
+        int *a_block_copy;
+        a_block_copy = copy_matrix(a_block, block_size, block_size);
+        MPI_Send(a_block_copy, block_size * block_size, MPI_INT, dest_proc, 0, MPI_COMM_WORLD);
+        MPI_Recv(a_block, block_size * block_size, MPI_INT, source_proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        dest_proc = ((my_i + step) % grid_size) * grid_size + my_j;
+        source_proc = ((my_i + (grid_size - step)) % grid_size) * grid_size + my_j;
+        // printf("Process %d source_proc: %d, dest_proc: %d\n", my_rank, source_proc, dest_proc);
+        int *b_block_copy;
+        b_block_copy = copy_matrix(b_block, block_size, block_size);
+        MPI_Send(b_block_copy, block_size * block_size, MPI_INT, dest_proc, 1, MPI_COMM_WORLD);
+        MPI_Recv(b_block, block_size * block_size, MPI_INT, source_proc, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
         BlockMultiplication(a_block, b_block, c_block, block_size);
-        // Циклический сдвиг блоков матрицы В в столбцах процессной
-        // решетки
-        BblockCommunication(b_block, block_size);
     }
 }
 
@@ -208,21 +193,6 @@ void ResultCollection(int *c_matrix, int *c_block, int size, int block_size)
     }
 }
 
-// void ProcessTermination(int *a_matrix, int *b_matrix, int *c_matrix, int *a_block, int *b_block,
-//                         int *c_block, int *matrix_a_block)
-// {
-//     if (my_rank == 0)
-//     {
-//         free(a_matrix);
-//         free(b_matrix);
-//         free(c_matrix);
-//     }
-//     free(a_block);
-//     free(b_block);
-//     free(c_block);
-//     free(matrix_a_block);
-// }
-
 int main(int argc, char *argv[])
 {
 
@@ -231,7 +201,6 @@ int main(int argc, char *argv[])
     int *a_matrix;
     int *b_matrix;
     int *c_matrix;
-    int *matrix_a_block;
 
     int *a_block, *b_block, *c_block;
 
@@ -239,9 +208,9 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &thread_cnt);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    GridSize = (int)sqrt((double)thread_cnt);
-    int block_size = size / GridSize;
-    if (thread_cnt != GridSize * GridSize)
+    grid_size = (int)sqrt((double)thread_cnt);
+    int block_size = size / grid_size;
+    if (thread_cnt != grid_size * grid_size)
     {
         if (my_rank == 0)
         {
@@ -251,13 +220,11 @@ int main(int argc, char *argv[])
     }
     else
     {
-        // Создание виртуальной решетки процессов и коммуникаторов
-        // строк и столбцов
-        CreateGridCommunicators();
+
         // Выделение памяти и инициализация элементов матриц
         if (my_rank == 0)
         {
-            if (size % GridSize != 0)
+            if (size % grid_size != 0)
             {
                 printf("Matrix size should be divided by grid size \n");
                 return -1;
@@ -267,7 +234,6 @@ int main(int argc, char *argv[])
         a_block = (int *)malloc(block_size * block_size * sizeof(int));
         b_block = (int *)malloc(block_size * block_size * sizeof(int));
         c_block = (int *)malloc(block_size * block_size * sizeof(int));
-        matrix_a_block = (int *)malloc(block_size * block_size * sizeof(int));
         initialize_matrix_with_zeros(c_block, block_size, block_size);
 
         if (my_rank == 0)
@@ -282,24 +248,27 @@ int main(int argc, char *argv[])
         }
 
         // Блочное распределение матриц между процессами
-        DataDistribution(a_matrix, b_matrix, matrix_a_block, b_block, size, block_size);
+        DataDistribution(a_matrix, b_matrix, a_block, b_block, size, block_size);
 
+        // Начальный сдвиг
+        InitialSkew(a_block, b_block, c_block, block_size);
+
+        // Параллельное умножение матриц
         double local_time_start = MPI_Wtime();
-        // Выполнение параллельного метода Фокса
-        ParallelResultCalculation(a_block, matrix_a_block, b_block,
-                                  c_block, block_size);
 
-        // Сбор результирующей матрицы на ведущем процессе
-        ResultCollection(c_matrix, c_block, size, block_size);
-
+        ShiftAndMultiply(a_block, b_block, c_block, block_size);
+        
         double local_time_finish = MPI_Wtime();
         double local_time_elapsed = local_time_finish - local_time_start;
         double time_elapsed;
         MPI_Reduce(&local_time_elapsed, &time_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        
+        // Сбор результирующей матрицы на ведущем процессе
+        ResultCollection(c_matrix, c_block, size, block_size);
 
         if (my_rank == 0)
         {
-            printf("Fox algorithm on %d threads runtime = %lf:\n", thread_cnt, time_elapsed);
+            printf("Cannon algorithm on %d threads runtime = %lf:\n", thread_cnt, time_elapsed);
         }
 
         // //---------------------OUTPUT----------------------
@@ -312,9 +281,8 @@ int main(int argc, char *argv[])
         //     print_matrix(c_matrix, size, size);
         // }
 
-        // Завершение процесса вычислений
-        // ProcessTermination(a_matrix, b_matrix, c_matrix, a_block, b_block,
-        //                    c_block, matrix_a_block);
+        // printf("Process %d B block:\n", my_rank);
+        // print_matrix(b_block, block_size, block_size);
     }
 
     MPI_Finalize();
