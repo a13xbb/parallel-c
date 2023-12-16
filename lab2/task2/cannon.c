@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <mpi.h>
 #include <math.h>
-#include "./utils.h"
+#include "../utils.h"
 
 int thread_cnt;
 int my_rank;
@@ -193,6 +193,19 @@ void ResultCollection(int *c_matrix, int *c_block, int size, int block_size)
     }
 }
 
+void FreeMemory(int *a_matrix, int *b_matrix, int *c_matrix, int *a_block, int *b_block, int *c_block)
+{
+    if (my_rank == 0)
+    {
+        free(a_matrix);
+        free(b_matrix);
+        free(c_matrix);
+    }
+    free(a_block);
+    free(b_block);
+    free(c_block);
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -257,12 +270,12 @@ int main(int argc, char *argv[])
         double local_time_start = MPI_Wtime();
 
         ShiftAndMultiply(a_block, b_block, c_block, block_size);
-        
+
         double local_time_finish = MPI_Wtime();
         double local_time_elapsed = local_time_finish - local_time_start;
         double time_elapsed;
         MPI_Reduce(&local_time_elapsed, &time_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-        
+
         // Сбор результирующей матрицы на ведущем процессе
         ResultCollection(c_matrix, c_block, size, block_size);
 
@@ -284,6 +297,8 @@ int main(int argc, char *argv[])
         // printf("Process %d B block:\n", my_rank);
         // print_matrix(b_block, block_size, block_size);
     }
+
+    FreeMemory(a_matrix, b_matrix, c_matrix, a_block, b_block, c_block);
 
     MPI_Finalize();
     return 0;

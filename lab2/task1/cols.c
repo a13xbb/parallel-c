@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
-#include "./utils.h"
+#include "../utils.h"
 
 int main(int argc, char* argV[]) {
     int n_rows, n_cols;
