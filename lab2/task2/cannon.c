@@ -281,7 +281,7 @@ int main(int argc, char *argv[])
 
         if (my_rank == 0)
         {
-            printf("Cannon algorithm on %d threads runtime = %lf:\n", thread_cnt, time_elapsed);
+            printf("Cannon algorithm on %d threads runtime:\n %lf\n", thread_cnt, time_elapsed);
         }
 
         // //---------------------OUTPUT----------------------
