@@ -74,7 +74,7 @@ int main(int argc, char* argV[]) {
     // }
 
     if (my_rank == 0) {
-        printf("Blocks parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
+        printf("Blocks parallelism on %d threads runtime:\n %lf\n", thread_cnt, time_elapsed);
     }
 
     free(matrix);

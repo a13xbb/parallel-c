@@ -49,11 +49,12 @@ int main(int argc, char* argV[]) {
         }
     }
       
-    MPI_Reduce(local_product, product, n_rows, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    
     double local_time_finish = MPI_Wtime();
     double local_time_elapsed = local_time_finish - local_time_start;
     double time_elapsed;
+
+    MPI_Reduce(local_product, product, n_rows, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    
     MPI_Reduce(&local_time_elapsed, &time_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
 
@@ -71,7 +72,7 @@ int main(int argc, char* argV[]) {
     // }
 
     if (my_rank == 0) {
-        printf("Cols parallelism on %d threads runtime = %lf\n", thread_cnt, time_elapsed);
+        printf("Cols parallelism on %d threads runtime:\n %lf\n", thread_cnt, time_elapsed);
     }
 
     free(matrix);

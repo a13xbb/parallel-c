@@ -39,7 +39,7 @@ int main(int argc, char* argV[]) {
     // printf("Product:\n");
     // print_vector(product, n_rows);
 
-    printf("Serial runtime: %.6lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
+    printf("Serial runtime:\n %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
 
     free(matrix);
     free(vector);
